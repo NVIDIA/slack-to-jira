@@ -46,33 +46,41 @@ variable "sns_alert_topic_arn" {
 }
 
 variable "tick_reaction" {
-  type = string
+  description = "Slack reaction emoji for marking messages as completed or approved"
+  type        = string
 }
 
 variable "x_reaction" {
-  type = string
+  description = "Slack reaction emoji for marking messages as rejected or closed"
+  type        = string
 }
 
 variable "sync_reaction" {
-  type = string
+  description = "Slack reaction emoji for triggering synchronization with Jira"
+  type        = string
 }
 
 variable "icon_url" {
-  type = string
+  description = "URL of the icon to display in Jira for linked Slack threads"
+  type        = string
 }
 
 variable "icon_title" {
-  type = string
+  description = "Title text for the icon displayed in Jira for linked Slack threads"
+  type        = string
 }
 
 variable "jira_server_url" {
-  type = string
+  description = "Base URL of the Jira server for API requests"
+  type        = string
 }
 
 variable "app_name" {
-  type = string
+  description = "Name of this application"
+  type        = string
 }
 
 variable "owner" {
-  type = string
+  description = "Owner of this application and deployed resources, for AWS tags"
+  type        = string
 }
