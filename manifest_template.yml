@@ -1,0 +1,27 @@
+display_information:
+  name: {{NAME}}
+  description: Link slack messages and threads to JIRA.
+  background_color: "#000000"
+features:
+  bot_user:
+    display_name: {{NAME}}
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - reactions:read
+      - reactions:write
+      - users:read
+      - files:read
+settings:
+  event_subscriptions:
+    request_url: {{REQUEST_URL}}
+    bot_events:
+      - app_mention
+      - reaction_added
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

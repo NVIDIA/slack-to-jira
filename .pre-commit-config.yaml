@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: af0ba72a73598c76189d6dd1b21d8532255d5942
+    hooks:
+      - id: black
+        language_version: python3
+        args:
+          - --check
+        language: python
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy .
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: 9a790d2bbf52124eecb5a71a4bab4884804ffa2a
+    hooks:
+      - id: terraform_fmt
+        args:
+          - --args=-check
+      - id: terraform_validate

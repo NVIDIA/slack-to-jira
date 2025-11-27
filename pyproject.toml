@@ -1,0 +1,156 @@
+[tool.poetry]
+name = "Slack-to-Jira"
+version = "0.1.0"
+description = "Slack bot that allows syncing data from Slack to JIRA."
+authors = ["Nikos Altiparmakis"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.13,<=3.14"
+atlassian-python-api = "4.0.7"
+requests = "2.32.5"
+slack-sdk = "3.36.0"
+aiohttp = "3.13.0"
+tenacity = "9.1.2"
+
+[tool.poetry.group.dev.dependencies]
+black = "25.1.0"
+boto3 = "1.36.24"
+moto = "5.0.28"
+pylint = "3.3.4"
+pytest = "8.3.4"
+pre-commit = "4.3.0"
+pytest-asyncio = "1.2.0"
+mypy = "1.18.2"
+boto3-stubs = { version = "1.36.24", extras = ["dynamodb", "sqs", "secretsmanager", "lambda", "api-gateway"] }
+types-requests = "2.32.4.20250913"
+
+
+[[tool.poetry.source]]
+name = "pypi"
+
+[tool.black]
+line-length = 100
+skip-string-normalization = true
+quiet = true
+exclude = '''
+(
+    ^/tests/|
+    layer/python/.*/.+|
+    venv/|
+    layer/python/deprecation.py
+)
+'''
+
+
+[tool.pylint.main]
+ignore-paths = [
+    "layer/python/.*/.+",
+    "venv/",
+    "layer/python/deprecation.py",
+    "layer/python/typing_extensions.py"
+]
+ignore-patterns = ["^\\.#"]
+limit-inference-results = 100
+persistent = false
+py-version = "3.13"
+suggestion-mode = true
+
+
+[tool.pylint.basic]
+argument-naming-style = "snake_case"
+attr-naming-style = "snake_case"
+class-attribute-naming-style = "any"
+class-const-naming-style = "UPPER_CASE"
+class-naming-style = "PascalCase"
+const-naming-style = "UPPER_CASE"
+function-naming-style = "snake_case"
+inlinevar-naming-style = "any"
+method-naming-style = "snake_case"
+module-naming-style = "snake_case"
+variable-naming-style = "snake_case"
+
+
+[tool.pylint.design]
+max-args = 10
+max-attributes = 15
+max-bool-expr = 5
+max-branches = 12
+max-locals = 15
+max-parents = 7
+max-positional-arguments = 10
+max-public-methods = 20
+max-returns = 6
+max-statements = 50
+
+
+[tool.pylint.format]
+ignore-long-lines = "^\\s*(# )?<?https?://\\S+>?$"
+indent-after-paren = 4
+indent-string = "    "
+max-line-length = 100
+max-module-lines = 1000
+
+
+[tool.pylint.logging]
+logging-format-style = "new"
+logging-modules = ["logging"]
+
+
+[tool.pylint."messages control"]
+confidence = ["HIGH", "CONTROL_FLOW", "INFERENCE", "INFERENCE_FAILURE", "UNDEFINED"]
+disable = [
+    "raw-checker-failed",
+    "bad-inline-option",
+    "locally-disabled",
+    "file-ignored",
+    "suppressed-message",
+    "useless-suppression",
+    "deprecated-pragma",
+    "use-symbolic-message-instead",
+    "use-implicit-booleaness-not-comparison-to-string",
+    "use-implicit-booleaness-not-comparison-to-zero",
+    "logging-fstring-interpolation",
+    "import-error",
+    "fixme",
+    "broad-exception-raised",
+    "broad-exception-caught",
+    "duplicate-code",
+    "redefined-outer-name"
+]
+
+
+[tool.pylint.reports]
+score = false
+
+
+[tool.pylint.similarities]
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = true
+ignore-signatures = true
+min-similarity-lines = 7
+
+
+[tool.pylint.variables]
+allow-global-unused-variables = true
+
+
+[tool.pytest.ini_options]
+testpaths = [
+    "slack_event_process/tests",
+    "slack_event_verify/tests"
+]
+
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = false
+strict = false
+disallow_untyped_defs = true
+warn_unused_ignores = false
+show_error_codes = true
+exclude = ["conftest", "layer/python"]
