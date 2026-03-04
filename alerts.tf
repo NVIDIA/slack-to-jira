@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+locals {
+  sns_alert_actions = var.sns_alert_topic_arn != null ? [var.sns_alert_topic_arn] : []
+}
 
 resource "aws_cloudwatch_metric_alarm" "slack_event_verify_lambda_invocations" {
   alarm_name        = "${local.project_name}-slack-event-verify-lambda-invocations${local.suffix}"
@@ -29,8 +33,8 @@ resource "aws_cloudwatch_metric_alarm" "slack_event_verify_lambda_invocations" {
     FunctionName = aws_lambda_function.verify_lambda.function_name
   }
 
-  alarm_actions      = [var.sns_alert_topic_arn]
-  ok_actions         = [var.sns_alert_topic_arn]
+  alarm_actions      = local.sns_alert_actions
+  ok_actions         = local.sns_alert_actions
   treat_missing_data = "ignore"
   tags = {
     Name = "${local.project_name}-slack-event-verify-lambda-invocations${local.suffix}"
@@ -52,8 +56,8 @@ resource "aws_cloudwatch_metric_alarm" "slack_event_process_lambda_invocations" 
     FunctionName = aws_lambda_function.process_lambda.function_name
   }
 
-  alarm_actions      = [var.sns_alert_topic_arn]
-  ok_actions         = [var.sns_alert_topic_arn]
+  alarm_actions      = local.sns_alert_actions
+  ok_actions         = local.sns_alert_actions
   treat_missing_data = "ignore"
 
   tags = {
@@ -76,8 +80,8 @@ resource "aws_cloudwatch_metric_alarm" "slack_event_dlq_message_count" {
     QueueName = aws_sqs_queue.main_dlq.name
   }
 
-  alarm_actions      = [var.sns_alert_topic_arn]
-  ok_actions         = [var.sns_alert_topic_arn]
+  alarm_actions      = local.sns_alert_actions
+  ok_actions         = local.sns_alert_actions
   treat_missing_data = "ignore"
   tags = {
     Name = "${local.project_name}-dlq-message-count${local.suffix}"

@@ -96,6 +96,18 @@ Once deployed, the bot can be used in Slack with the following interactions:
 
 A reaction will be put in the corresponding slack message to signal success or failure for each of the commands listed above.
 
+# Monitoring
+
+The project provides some basic monitoring of the bot for excessive usage or errors via CloudWatch alarms defined in [alerts.tf](alerts.tf).
+
+| Alarm | Metric | Threshold | Description |
+|-------|--------|-----------|-------------|
+| Slack event verify Lambda invocations | Lambda invocations (1 min) | ≥ 20 | High volume of events hitting the verify Lambda |
+| Slack event process Lambda invocations | Lambda invocations (1 min) | ≥ 20 | High volume of events being processed |
+| DLQ message count | SQS messages visible | ≥ 10 | Messages in the dead-letter queue (failed processing) |
+
+Alarms are always created and evaluated. You are always free to modify the thresholds or make them variable; the ones given are just as an example. To receive notifications (e.g. via email or Slack), set the `sns_alert_topic_arn` variable to an SNS topic ARN. You may leave it unset or explicitly set to null to have alarms without SNS notifications. Plumbing from SNS topic onward is outside the scope of this project.
+
 # Configuration
 
 ## Required Secrets
