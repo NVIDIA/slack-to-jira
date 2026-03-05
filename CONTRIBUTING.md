@@ -3,15 +3,15 @@
 
 #### Issue Tracking
 
-* All enhancement, bugfix, or change requests must begin with the creation of an inssue.
-* The issue request does not have to be reviwed or approved by other engineer before the creation of a pull request.
+* All enhancement, bugfix, or change requests must begin with the creation of an issue.
+* The issue request does not have to be reviewed or approved by other engineers before the creation of a pull request.
 
 
 #### Guidelines
 
 * Please follow the existing conventions in the relevant file, submodule, module, and project when you add new code or when you extend/fix existing functionality.
 
-* To maintain consistency in code formatting and style, olease make sure you have set the pre-commit hooks provided in this repository. Please make sure the hooks run when you decide to commit your changes.
+* To maintain consistency in code formatting and style, please make sure you have set the pre-commit hooks provided in this repository. Please make sure the hooks run when you decide to commit your changes.
 
 * All new changes must be accompanied by unit tests to ensure the functionality of the code base.
 
