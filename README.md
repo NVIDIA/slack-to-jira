@@ -27,7 +27,7 @@ The processor code can be re-used if you want to set up your bot with socket mod
 
 ![AWS arch](assets/aws-arch.png)
 
-Most of the code in the two Lambda functions is shared. The first lambda is tasked only with early validation of the event and subsequent sending of a corresponding even to the SQS queue.
+Most of the code in the two Lambda functions is shared. The first lambda is tasked only with early validation of the event and subsequent sending of a corresponding event to the SQS queue.
 
 By sharing the code in a common layer, we avoid the risk of having the two functions go out of sync.
 
