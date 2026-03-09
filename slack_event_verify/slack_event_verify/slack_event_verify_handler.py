@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,14 +34,14 @@ from slack_sdk_wrapper import SlackSdkWrapper
 
 from .slack_event_verifier import SlackEventVerifier
 
-SIGNING_SECRET_ID = os.getenv('SIGNING_SECRET_ID', '')
-SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL', '')
+SIGNING_SECRET_ID = os.environ['SIGNING_SECRET_ID']
+SQS_QUEUE_URL = os.environ['SQS_QUEUE_URL']
+SLACK_TOKEN_ID = os.getenv('SLACK_TOKEN_ID')
 
 logger = logging.getLogger()
 logger.setLevel(level=logging.INFO)
 
 sqs_wrapper = SqsWrapper()
-slack_sdk_wrapper = SlackSdkWrapper()
 secrets_manager_wrapper = SecretsManagerWrapper()
 
 
@@ -57,6 +57,12 @@ def verify(event_: dict, _: Any) -> dict:
         A response dictionary with status code, headers, and body.
     '''
     logger.info(f'Received event: {event_}')
+
+    slack_token = None
+    if SLACK_TOKEN_ID:
+        slack_token = secrets_manager_wrapper.get_secret(SLACK_TOKEN_ID)
+
+    slack_sdk_wrapper = SlackSdkWrapper(slack_token=slack_token)
 
     verifier = SlackEventVerifier(
         slack_sdk_wrapper,

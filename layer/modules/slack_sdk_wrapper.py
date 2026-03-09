@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +45,7 @@ class SlackSdkWrapper:
     ClientException = SlackClientError
 
     def __init__(self, slack_token: Optional[str] = None) -> None:
+        self.bot_id = None
         if slack_token:
             self.client = WebClient(token=slack_token)
             self.bot_id = self.client.auth_test()['user_id']

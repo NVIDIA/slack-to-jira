@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,11 @@ resource "aws_iam_policy" "verify_lambda_policy" {
         Effect   = "Allow"
         Action   = "secretsmanager:GetSecretValue"
         Resource = aws_secretsmanager_secret.slack_signing_secret.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = aws_secretsmanager_secret.slack_token.arn
       },
       {
         Effect = "Allow"
@@ -93,6 +98,7 @@ resource "aws_lambda_function" "verify_lambda" {
     variables = {
       SQS_QUEUE_URL     = aws_sqs_queue.main_queue.id
       SIGNING_SECRET_ID = aws_secretsmanager_secret.slack_signing_secret.id
+      SLACK_TOKEN_ID    = aws_secretsmanager_secret.slack_token.id
     }
   }
 

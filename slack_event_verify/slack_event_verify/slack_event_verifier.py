@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,6 +112,18 @@ class SlackEventVerifier:  # pylint: disable=too-few-public-methods
             }
 
         event_dict = body.get('event', {})
+
+        # Any reaction added by the bot by itself triggers an event.
+        # The event will be received by this handler.
+        # This could thereotically lead to an infinite loop,
+        # if the event reacts with the same reaction.
+        # Additionally, events added by the bot by itself are not useful
+        # in the context of this handler.
+        # Therefore, ignore them here.
+        user_id = event_dict.get('user')
+        if self.slack_sdk_wrapper.bot_id and user_id == self.slack_sdk_wrapper.bot_id:
+            logger.info(f'Ignoring event from bot user: {event_dict}')
+            return self.construct_return_data(200, 'application/json', {'message': 'Success'})
 
         try:
             # We don't need to pass in the wrappers.
