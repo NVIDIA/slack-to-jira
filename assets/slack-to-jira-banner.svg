@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1f36"/>
+      <stop offset="50%" style="stop-color:#2d3561"/>
+      <stop offset="100%" style="stop-color:#1a1f36"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#611f69"/>
+      <stop offset="100%" style="stop-color:#1264a3"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="200" fill="url(#bg)" rx="8"/>
+  <g opacity="0.4">
+    <circle cx="120" cy="100" r="28" fill="none" stroke="url(#accent)" stroke-width="3"/>
+    <path d="M100 85 L100 75 L140 75 L140 95 L120 95 Z" fill="none" stroke="url(#accent)" stroke-width="2"/>
+  </g>
+  <path d="M165 100 L235 100" stroke="url(#accent)" stroke-width="2" stroke-dasharray="6 4" opacity="0.8"/>
+  <polygon points="230,95 240,100 230,105" fill="#1264a3"/>
+  <g opacity="0.4">
+    <rect x="660" y="72" width="60" height="56" rx="4" fill="none" stroke="url(#accent)" stroke-width="2"/>
+    <line x1="660" y1="88" x2="720" y2="88" stroke="url(#accent)" stroke-width="1"/>
+  </g>
+  <text x="400" y="115" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="42" font-weight="700" fill="#ffffff">Slack to Jira</text>
+  <text x="400" y="148" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="16" fill="#94a3b8">Sync information from Slack to Jira</text>
+</svg>
