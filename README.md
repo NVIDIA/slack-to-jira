@@ -1,6 +1,19 @@
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-# Slack to Jira
+
+<p align="center">
+  <img src="assets/slack-to-jira-banner.svg" alt="Slack to Jira" width="100%"/>
+</p>
+
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="https://github.com/NVIDIA/slack-to-jira/stargazers"><img src="https://img.shields.io/github/stars/NVIDIA/slack-to-jira?style=flat&logo=github" alt="GitHub Stars"></a>
+  <a href="https://github.com/NVIDIA/slack-to-jira/issues"><img src="https://img.shields.io/github/issues/NVIDIA/slack-to-jira" alt="GitHub Issues"></a>
+  <a href="https://github.com/NVIDIA/slack-to-jira/commits"><img src="https://img.shields.io/github/last-commit/NVIDIA/slack-to-jira" alt="GitHub Last Commit"></a>
+</p>
+
+---
+
 
 A slack bot that allows linking slack threads to JIRA and copying messages to linked JIRA issues as comments.
 
