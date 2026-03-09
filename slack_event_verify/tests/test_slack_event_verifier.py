@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,6 +53,8 @@ SIGNING_SECRET_ID = 'test-signing-secret'
 SIGNING_SECRET_VALUE = 'test_signing_secret_value'
 SQS_QUEUE_NAME = 'test-queue.fifo'
 SQS_QUEUE_URL = f'https://sqs.us-east-1.amazonaws.com/123456789012/{SQS_QUEUE_NAME}'
+
+BOT_ID = 'UBOT123'
 
 
 def create_slack_signature(body: str, signing_secret: str, timestamp: Optional[str] = None) -> str:
@@ -112,7 +114,9 @@ def aws_setup():
 
 @pytest.fixture
 def slack_sdk_wrapper():
-    return SlackSdkWrapper()
+    wrapper = SlackSdkWrapper()
+    wrapper.bot_id = BOT_ID
+    return wrapper
 
 
 @pytest.fixture(autouse=True)
@@ -164,6 +168,7 @@ class EventType(Enum):
 class MockEvent:
     event_type: EventType = field(default=EventType.INVALID)
     event_dict: Dict[str, Any] = field(default_factory=dict)
+    user: Optional[str] = None
 
 
 @dataclass
@@ -182,6 +187,9 @@ class MockAppMentionEvent(MockEvent):
             'text': self.text,
             'type': self.event_type.value,
         }
+        if self.user is not None:
+            self.event_dict['user'] = self.user
+
         self.event_dict = {k: v for k, v in self.event_dict.items() if v is not None}
 
 
@@ -198,6 +206,8 @@ class MockReactionAddedEvent(MockEvent):
             'item': {'channel': self.channel, 'ts': self.ts},
             'type': self.event_type.value,
         }
+        if self.user is not None:
+            self.event_dict['user'] = self.user
 
         self.event_dict['item'] = {
             k: v for k, v in self.event_dict['item'].items() if v is not None
@@ -568,3 +578,39 @@ def test_verify_message_sent(sqs_client, verifier, test_case):
 
     message_body = json.loads(messages['Messages'][0]['Body'])
     assert message_body == json.loads(test_case.event_obj.to_dict()['body'])
+
+
+def test_verify_event_from_bot_ignored(sqs_client, verifier):
+    event_container = EventContainer(
+        event_obj=MockReactionAddedEvent(
+            user=BOT_ID,
+            reaction=CONFIG['sync_reaction'],
+            channel='C1234567890',
+            ts='1234567890.123456',
+        ),
+    )
+    result = verifier.verify(event_container.to_dict())
+
+    assert result['statusCode'] == 200
+    body_json = json.loads(result['body'])
+    assert body_json['message'] == 'Success'
+
+    messages = sqs_client.receive_message(QueueUrl=SQS_QUEUE_URL)
+    assert 'Messages' not in messages or len(messages['Messages']) == 0
+
+
+def test_verify_event_from_other_user_forwarded(sqs_client, verifier):
+    event_container = EventContainer(
+        event_obj=MockReactionAddedEvent(
+            user='TEST_OTHER_USER_ID',
+            reaction=CONFIG['sync_reaction'],
+            channel='C1234567890',
+            ts='1234567890.123456',
+        ),
+    )
+    result = verifier.verify(event_container.to_dict())
+
+    assert result['statusCode'] == 200
+    messages = sqs_client.receive_message(QueueUrl=SQS_QUEUE_URL)
+    assert 'Messages' in messages
+    assert len(messages['Messages']) == 1
