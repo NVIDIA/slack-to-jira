@@ -40,7 +40,10 @@ resource "aws_iam_policy" "verify_lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
+        Resource = [
+          aws_cloudwatch_log_group.verify_lambda_log_group.arn,
+          "${aws_cloudwatch_log_group.verify_lambda_log_group.arn}:*"
+        ]
       }
     ]
   })
@@ -105,14 +108,16 @@ resource "aws_lambda_function" "verify_lambda" {
   tags = {
     Name = "${local.project_name}-verify-lambda${local.suffix}"
   }
+
+  depends_on = [aws_cloudwatch_log_group.verify_lambda_log_group]
 }
 
 resource "aws_cloudwatch_log_group" "verify_lambda_log_group" {
-  name = "/aws/lambda/${aws_lambda_function.verify_lambda.function_name}"
+  name = "/aws/lambda/${local.project_name}-verify-lambda${local.suffix}"
 
   retention_in_days = 30
 
   tags = {
-    Name = "${aws_lambda_function.verify_lambda.function_name}-log-group"
+    Name = "${local.project_name}-verify-lambda${local.suffix}-log-group"
   }
 }
