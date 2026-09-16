@@ -145,24 +145,27 @@ class AppMentionEvent(Event):
             self.channel_id: The Slack channel ID where mention occurred.
             self.message_ts: The timestamp of the mention message.
         '''
-        logger.info(f'Processing app mention event: {event_data}')
-
         self.thread_ts = event_data.get('thread_ts')
 
         self.channel_id = event_data.get('channel')
         self.message_ts = event_data.get('ts')
 
+        thread_id = None
+        if isinstance(self.channel_id, str) and isinstance(self.thread_ts, str):
+            thread_id = self._get_thread_id(self.thread_ts, self.channel_id)
+        logger.info(f'Processing app mention event from thread: {thread_id!r}')
+
         if self.thread_ts is None:
-            logger.error(f'Missing thread_ts in app mention event: {event_data}')
-            raise NotHandledException(f'Missing thread_ts in app mention event: {event_data}')
+            logger.error(f'Missing thread_ts in app mention event from thread: {thread_id!r}')
+            raise NotHandledException('Missing thread_ts in app mention event')
 
         if self.channel_id is None:
-            logger.error(f'Missing channel in app mention event: {event_data}')
-            raise NotHandledException(f'Missing channel in app mention event: {event_data}')
+            logger.error(f'Missing channel in app mention event from thread: {thread_id!r}')
+            raise NotHandledException('Missing channel in app mention event')
 
         if self.message_ts is None:
-            logger.error(f'Missing message_ts in app mention event: {event_data}')
-            raise NotHandledException(f'Missing message_ts in app mention event: {event_data}')
+            logger.error(f'Missing message_ts in app mention event from thread: {thread_id!r}')
+            raise NotHandledException('Missing message_ts in app mention event')
 
     def construct_message_group_id(self) -> str:
         '''

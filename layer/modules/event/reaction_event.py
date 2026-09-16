@@ -71,7 +71,15 @@ class ReactionEvent(Event):
             since reactions don't have additional arguments.
         '''
         args = None
-        logger.info(f'Infer subtype: {event_data}')
+        item = event_data.get('item')
+        if not isinstance(item, dict):
+            item = {}
+        channel = item.get('channel')
+        message_ts = item.get('ts')
+        thread_id = None
+        if isinstance(channel, str) and isinstance(message_ts, str):
+            thread_id = f'{channel}_{message_ts}'
+        logger.info(f'Inferring reaction subtype from thread: {thread_id!r}')
         return event_data.get('reaction'), args  # type: ignore
 
     def _handle_event_type(self, event_data: dict) -> None:
