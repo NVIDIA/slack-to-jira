@@ -28,16 +28,19 @@ variable "dev_environment" {
 variable "jira_token" {
   type        = string
   description = "Jira token for the Slack to Jira integration"
+  sensitive   = true
 }
 
 variable "slack_token" {
   type        = string
   description = "Slack token for requests to the Slack API"
+  sensitive   = true
 }
 
 variable "slack_signing_secret" {
   type        = string
   description = "Slack signing secret for requests to the Slack API"
+  sensitive   = true
 }
 
 variable "sns_alert_topic_arn" {
