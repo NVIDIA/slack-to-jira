@@ -56,7 +56,7 @@ def verify(event_: dict, _: Any) -> dict:
     Returns:
         A response dictionary with status code, headers, and body.
     '''
-    logger.info(f'Received event: {event_}')
+    logger.info('Received Slack event')
 
     slack_token = None
     if SLACK_TOKEN_ID:
