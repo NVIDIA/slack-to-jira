@@ -36,7 +36,10 @@ resource "aws_iam_policy" "process_lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "*"
+        Resource = [
+          aws_cloudwatch_log_group.process_lambda_log_group.arn,
+          "${aws_cloudwatch_log_group.process_lambda_log_group.arn}:*"
+        ]
       },
       {
         Effect = "Allow",
@@ -122,6 +125,8 @@ resource "aws_lambda_function" "process_lambda" {
   tags = {
     Name = "${local.project_name}-process-lambda${local.suffix}"
   }
+
+  depends_on = [aws_cloudwatch_log_group.process_lambda_log_group]
 }
 resource "aws_lambda_event_source_mapping" "process_lambda_source_mapping" {
   event_source_arn = aws_sqs_queue.main_queue.arn
@@ -136,11 +141,11 @@ resource "aws_lambda_event_source_mapping" "process_lambda_source_mapping" {
 }
 
 resource "aws_cloudwatch_log_group" "process_lambda_log_group" {
-  name = "/aws/lambda/${aws_lambda_function.process_lambda.function_name}"
+  name = "/aws/lambda/${local.project_name}-process-lambda${local.suffix}"
 
   retention_in_days = 30
 
   tags = {
-    Name = "${aws_lambda_function.process_lambda.function_name}-log-group"
+    Name = "${local.project_name}-process-lambda${local.suffix}-log-group"
   }
 }
