@@ -26,7 +26,7 @@ import base64
 import json
 import logging
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import event
 
@@ -87,24 +87,25 @@ class SlackEventVerifier:  # pylint: disable=too-few-public-methods
         if event_dict.get('isBase64Encoded', False):
             body = base64.b64decode(body).decode('utf-8')
 
+        thread_id = self.thread_id_from_body(body)
         if not body or not headers:
-            logger.error(f'Missing headers or body: {event_dict}')
+            logger.error(f'Missing headers or body from thread: {thread_id!r}')
             return self.construct_return_data(400, 'application/json', {'message': 'Bad Request'})
 
         signing_secret = self.secrets_manager_wrapper.get_secret(self.signing_secret_id)
 
         if not self.slack_sdk_wrapper.is_valid_request(body, headers, signing_secret):
-            logger.error(f'Could not verify request: {event_dict}')
+            logger.error(f'Could not verify request from thread: {thread_id!r}')
             return self.construct_return_data(403, 'application/json', {'message': 'Forbidden'})
 
         body = json.loads(body)
 
-        logger.info(f'Authenticated Slack event: {body}')
+        logger.info(f'Authenticated Slack event from thread: {thread_id!r}')
 
         # Synchronous invocation.
         # Return the challenge to Slack for verification.
         if body.get('type') == 'url_verification':
-            logger.info(f'Returning challenge to Slack: {body}')
+            logger.info('Returning challenge to Slack')
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'text/plain'},
@@ -122,7 +123,7 @@ class SlackEventVerifier:  # pylint: disable=too-few-public-methods
         # Therefore, ignore them here.
         user_id = event_dict.get('user')
         if self.slack_sdk_wrapper.bot_id and user_id == self.slack_sdk_wrapper.bot_id:
-            logger.info(f'Ignoring event from bot user: {event_dict}')
+            logger.info(f'Ignoring event from bot user in thread: {thread_id!r}')
             return self.construct_return_data(200, 'application/json', {'message': 'Success'})
 
         try:
@@ -133,13 +134,16 @@ class SlackEventVerifier:  # pylint: disable=too-few-public-methods
                 event_dict
             )
         except event.EventFactory.UndefinedCommand:
-            logger.error(f'Unsupported event: {event_dict}')
+            logger.error(f'Unsupported event from thread: {thread_id!r}')
             return self.construct_return_data(400, 'application/json', {'message': 'Bad Request'})
 
         # Asynchronous handling.
         # Send the event to the SQS queue and forget about it.
         # TODO handle rate limit errors
-        logger.info(f'Sending event to SQS queue {self.sqs_queue_url}: {body}')
+        logger.info(
+            f'Sending event from thread {event_obj.construct_message_group_id()} '
+            f'to SQS queue {self.sqs_queue_url}'
+        )
         self.sqs_wrapper.send_message(
             queue_url=self.sqs_queue_url,
             message=body,
@@ -147,6 +151,32 @@ class SlackEventVerifier:  # pylint: disable=too-few-public-methods
         )
 
         return self.construct_return_data(200, 'application/json', {'message': 'Success'})
+
+    @staticmethod
+    def thread_id_from_body(body: Any) -> str | None:
+        '''Return ``{channel}_{thread_ts}`` from a Slack body string or dict.'''
+        payload = body
+        if isinstance(body, str):
+            try:
+                payload = json.loads(body)
+            except json.JSONDecodeError:
+                return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        inner = payload.get('event') if isinstance(payload.get('event'), dict) else payload
+        if not isinstance(inner, dict):
+            return None
+
+        item = inner.get('item')
+        if not isinstance(item, dict):
+            item = {}
+        channel = inner.get('channel') or inner.get('channel_id') or item.get('channel')
+        thread_ts = inner.get('thread_ts') or item.get('ts') or inner.get('ts')
+        if isinstance(channel, str) and isinstance(thread_ts, str):
+            return f'{channel}_{thread_ts}'
+        return None
 
     @staticmethod
     def construct_return_data(status_code: int, content_type: str, body: dict) -> dict:

@@ -599,6 +599,35 @@ def test_verify_event_from_bot_ignored(sqs_client, verifier):
     assert 'Messages' not in messages or len(messages['Messages']) == 0
 
 
+def test_failed_verification_logs_do_not_include_signature_or_token(caplog, verifier):
+    payload = {
+        'token': 'deprecated-verification-token',
+        'type': 'event_callback',
+        'event': {
+            'type': 'app_mention',
+            'channel': 'C123',
+            'thread_ts': '123.456',
+            'text': 'hello',
+        },
+    }
+    event_dict = {
+        'headers': {'X-Slack-Signature': 'v0=not-a-real-signature'},
+        'body': json.dumps(payload),
+        'isBase64Encoded': False,
+    }
+
+    with caplog.at_level('ERROR'):
+        result = verifier.verify(event_dict)
+
+    assert result['statusCode'] == 403
+    joined = '\n'.join(caplog.messages)
+    assert 'Could not verify request' in joined
+    assert 'C123_123.456' in joined
+    assert 'hello' not in joined
+    assert 'v0=not-a-real-signature' not in joined
+    assert 'deprecated-verification-token' not in joined
+
+
 def test_verify_event_from_other_user_forwarded(sqs_client, verifier):
     event_container = EventContainer(
         event_obj=MockReactionAddedEvent(
@@ -614,3 +643,34 @@ def test_verify_event_from_other_user_forwarded(sqs_client, verifier):
     messages = sqs_client.receive_message(QueueUrl=SQS_QUEUE_URL)
     assert 'Messages' in messages
     assert len(messages['Messages']) == 1
+
+
+def test_thread_id_from_body_prefers_thread_ts():
+    body = json.dumps(
+        {
+            'token': 'deprecated-verification-token',
+            'event': {
+                'type': 'app_mention',
+                'channel': 'C123',
+                'ts': '111.222',
+                'thread_ts': '333.444',
+                'text': 'should not be used',
+            },
+        }
+    )
+
+    assert SlackEventVerifier.thread_id_from_body(body) == 'C123_333.444'
+
+
+def test_thread_id_from_body_uses_reaction_item():
+    body = json.dumps(
+        {'event': {'type': 'reaction_added', 'item': {'channel': 'C999', 'ts': '555.666'}}}
+    )
+
+    assert SlackEventVerifier.thread_id_from_body(body) == 'C999_555.666'
+
+
+def test_thread_id_from_body_returns_none_when_missing():
+    assert SlackEventVerifier.thread_id_from_body(json.dumps({'type': 'url_verification'})) is None
+    assert SlackEventVerifier.thread_id_from_body('not-json') is None
+    assert SlackEventVerifier.thread_id_from_body(None) is None
