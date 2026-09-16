@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ registrations, and handle comment synchronization between Slack and Jira.
 from __future__ import annotations
 
 import logging
+import traceback
 from typing import Optional
 
 import event
@@ -70,7 +71,7 @@ class SlackEventProcessor:  # pylint: disable=too-few-public-methods
         try:
             event_obj = self._create_event(event_dict)
         except:  # pylint: disable=bare-except
-            logger.error(f'Encountered exception while creating event: {event_dict}')
+            logger.error(f'Encountered exception while creating event: {traceback.format_exc()}')
             raise
 
         self._process(event_obj)

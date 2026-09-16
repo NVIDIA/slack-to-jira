@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,7 +127,6 @@ class EventFactory:  # pylint: disable=too-few-public-methods
             >>> factory.create_event({'type': 'reaction_added', 'reaction': 'speech_balloon'})
             <ReactionSyncEvent object>
         '''
-        logger.info(self.top_level_event_types, self.concrete_event_types)
         event_data = copy.deepcopy(event_data)
         event_type = event_data.pop('type', None)
         if not event_type or event_type not in self.top_level_event_types:
