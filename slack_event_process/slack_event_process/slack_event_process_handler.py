@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,7 @@ def process(event_: dict, _: Any) -> None:
         event_: The Lambda event dictionary containing SQS records.
         _: The Lambda context (unused).
     '''
-    logger.info(f'Processing event: {event_}')
+    logger.info('Starting event processing...')
 
     jira_token = secrets_manager_wrapper.get_secret(JIRA_TOKEN_ID)
     slack_token = secrets_manager_wrapper.get_secret(SLACK_TOKEN_ID)
