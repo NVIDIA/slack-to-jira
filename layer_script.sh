@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-rm -rf /app/layer/python/*
+set -euo pipefail
+
+rm -rf /app/layer/python
+mkdir -p /app/layer/python
 cp -r /app/layer/modules/* /app/layer/python/
 pip install poetry==2.2.1 poetry-plugin-export==1.9.0 python-inspector==0.14.3
 poetry export -f requirements.txt --without-hashes --only main > requirements.txt
 pip install --no-deps --target=/app/layer/python -r requirements.txt
 rm requirements.txt
+
+# A layer without the project modules deploys fine but fails at import time.
+for module in /app/layer/modules/*; do
+  target="/app/layer/python/$(basename "${module}")"
+  if [ ! -e "${target}" ]; then
+    echo "Layer build incomplete: ${target} is missing" >&2
+    exit 1
+  fi
+done
