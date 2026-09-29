@@ -25,9 +25,14 @@ variable "dev_environment" {
   default     = true
 }
 
+variable "jira_email" {
+  type        = string
+  description = "Atlassian account email that owns the Jira Cloud API token"
+}
+
 variable "jira_token" {
   type        = string
-  description = "Jira token for the Slack to Jira integration"
+  description = "Jira Cloud API token for the Slack to Jira integration"
   sensitive   = true
 }
 
@@ -75,7 +80,7 @@ variable "icon_title" {
 }
 
 variable "jira_server_url" {
-  description = "Base URL of the Jira server for API requests"
+  description = "Base URL of the Jira Cloud site, for example https://<namespace>.atlassian.net"
   type        = string
 }
 

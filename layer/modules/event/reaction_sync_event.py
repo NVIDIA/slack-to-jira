@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,9 @@ and attachments to linked Jira issues as comments.
 from __future__ import annotations
 
 import asyncio
+import base64
 from datetime import datetime, UTC
+import json
 import logging
 from pathlib import Path
 from typing import Any, Optional, cast, AsyncGenerator, List
@@ -84,6 +86,7 @@ class AsyncSlackToJiraTransfer:
     def __init__(
         self,
         slack_token: str,
+        jira_email: str,
         jira_token: str,
         jira_server_url: str,
         channel_id: str,
@@ -94,14 +97,21 @@ class AsyncSlackToJiraTransfer:
 
         Args:
             slack_token: Bearer token for Slack API authentication.
-            jira_token: Bearer token for Jira API authentication.
-            jira_server_url: Base URL of the Jira server (e.g., 'https://jira.example.com').
+            jira_email: Atlassian account email that owns the Jira Cloud API token.
+            jira_token: Jira Cloud API token.
+            jira_server_url: Base URL of the Jira site (e.g., 'https://<namespace>.atlassian.net').
             channel_id: Slack channel ID for filename uniqueness.
             message_ts: Slack message timestamp for filename uniqueness.
         '''
         self.slack_token = slack_token
+        self.jira_email = jira_email
         self.jira_token = jira_token
-        self.jira_api_url_template = f'{jira_server_url}/rest/api/2/issue/{{issue_id}}/attachments'
+        self.jira_server_url = jira_server_url.rstrip('/')
+        token = base64.b64encode(f'{jira_email}:{jira_token}'.encode()).decode()
+        self.jira_authorization = f'Basic {token}'
+        self.jira_api_url_template = (
+            f'{self.jira_server_url}/rest/api/3/issue/{{issue_id}}/attachments'
+        )
         self.channel_id = channel_id
         self.message_ts = message_ts
 
@@ -112,28 +122,96 @@ class AsyncSlackToJiraTransfer:
         self.filename_suffix = f'{self.channel_id}-{self.message_ts}-{self.formatted_ts}'
 
     @staticmethod
-    def filename_to_jira_markup(filename: str) -> str:
+    def sanitize_filename(filename: str) -> str:
         '''
-        Convert a filename to Jira markup for attachments.
-
-        Generates appropriate Jira markup based on file type. Image files are
-        rendered as inline thumbnails, while other files are shown as attachment links.
+        Drop path components from a Slack filename.
 
         Args:
-            filename: The name of the attached file.
+            filename: The name of the attached file, as reported by Slack.
 
         Returns:
-            Jira markup string: '!filename|thumbnail!' for images,
-            '[^filename]' for other files.
+            The bare filename.
 
         Example:
-            'photo.png' -> '!photo.png|thumbnail!'
-            'document.pdf' -> '[^document.pdf]'
+            '../../photo.png' -> 'photo.png'
         '''
-        if filename.endswith(AsyncSlackToJiraTransfer.IMAGE_EXTENSIONS):
-            return f'!{filename}|thumbnail!'
+        return Path(filename).name
 
-        return f'[^{filename}]'
+    @staticmethod
+    def attachment_nodes(attachment: dict) -> list[dict]:
+        '''
+        Build Atlassian Document Format nodes for an uploaded Jira attachment.
+
+        Images are embedded from the attachment content URL. Jira Cloud rejects a
+        media node that uses the numeric attachment ID. Every file also gets a
+        link, and the upload itself remains an issue attachment.
+
+        Args:
+            attachment: Uploaded attachment with filename, content URL, and is_image.
+
+        Returns:
+            ADF block nodes for the attachment.
+        '''
+        nodes = []
+        if attachment['is_image']:
+            nodes.append(
+                {
+                    'type': 'mediaSingle',
+                    'attrs': {'layout': 'center'},
+                    'content': [
+                        {
+                            'type': 'media',
+                            'attrs': {
+                                'type': 'external',
+                                'url': attachment['content'],
+                                'alt': attachment['filename'],
+                            },
+                        }
+                    ],
+                }
+            )
+        nodes.append(
+            {
+                'type': 'paragraph',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': attachment['filename'],
+                        'marks': [
+                            {
+                                'type': 'link',
+                                'attrs': {'href': attachment['content']},
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        return nodes
+
+    def _uploaded_attachment(self, filename: str, uploaded: dict) -> dict:
+        '''
+        Normalize a Jira attachment-upload response.
+
+        Args:
+            filename: Filename sent in the upload.
+            uploaded: One attachment object from the Jira response.
+
+        Returns:
+            Attachment details used to build the comment.
+        '''
+        attachment_id = str(uploaded['id'])
+        content = uploaded.get('content') or (
+            f'{self.jira_server_url}/rest/api/3/attachment/content/{attachment_id}'
+        )
+        # Jira returns the stored filename percent-encoded. The name we uploaded
+        # is what should appear in the comment.
+        return {
+            'filename': filename,
+            'id': attachment_id,
+            'content': content,
+            'is_image': filename.lower().endswith(self.IMAGE_EXTENSIONS),
+        }
 
     @staticmethod
     async def chunk_reader(queue: asyncio.Queue[bytes | None]) -> AsyncGenerator[bytes, None]:
@@ -168,7 +246,7 @@ class AsyncSlackToJiraTransfer:
         jira_issue_id: str,
         filename: str,
         file_id: int,
-    ) -> str:
+    ) -> dict:
         '''
         Upload a file to a Jira issue by streaming chunks from a queue.
 
@@ -184,7 +262,7 @@ class AsyncSlackToJiraTransfer:
             file_id: Sequential file index for uniqueness.
 
         Returns:
-            str: Jira markup for the uploaded file (thumbnail or attachment link).
+            dict: Uploaded attachment details.
 
         Raises:
             Exception: If upload fails or times out after UPLOAD_TIMEOUT_SECONDS.
@@ -194,7 +272,7 @@ class AsyncSlackToJiraTransfer:
             file, making it memory-efficient for large files.
         '''
         headers = {
-            'Authorization': f'Bearer {self.jira_token}',
+            'Authorization': self.jira_authorization,
             'X-Atlassian-Token': 'no-check',
         }
 
@@ -216,16 +294,18 @@ class AsyncSlackToJiraTransfer:
             after=after_log(logger, logging.ERROR),
             reraise=True,
         )
-        async def do_post() -> None:
+        async def do_post() -> dict:
             async with session.post(endpoint_url, headers=headers, data=form) as resp:
                 resp.raise_for_status()
-                await resp.read()
+                payload = json.loads(await resp.read())
+                uploaded = payload[0] if isinstance(payload, list) else payload
                 logger.info(f'Uploaded {filename} to jira issue {jira_issue_id}')
+                return uploaded
 
         post_task = asyncio.create_task(do_post())
 
         try:
-            await asyncio.wait_for(post_task, timeout=self.UPLOAD_TIMEOUT_SECONDS)
+            uploaded = await asyncio.wait_for(post_task, timeout=self.UPLOAD_TIMEOUT_SECONDS)
         except Exception as e:
             post_task.cancel()
             await asyncio.gather(post_task, return_exceptions=True)
@@ -233,7 +313,7 @@ class AsyncSlackToJiraTransfer:
             logger.error(f'Upload failed for {filename} -> {new_filename} to {endpoint_url}: {e}')
             raise
 
-        return self.filename_to_jira_markup(new_filename)
+        return self._uploaded_attachment(new_filename, uploaded)
 
     async def download_and_process_file(
         self,
@@ -241,7 +321,7 @@ class AsyncSlackToJiraTransfer:
         file: dict[str, str],
         jira_issue_ids: list[str],
         file_id: int,
-    ) -> List[str]:
+    ) -> List[dict | str]:
         '''
         Download a file from Slack and concurrently upload to multiple Jira issues.
 
@@ -259,7 +339,7 @@ class AsyncSlackToJiraTransfer:
             file_id: Sequential file index for unique naming.
 
         Returns:
-            List[str]: Jira markup for each issue (empty string if upload failed).
+            List[dict | str]: Attachment details for each issue. Empty string if upload failed.
 
         Note:
             The file is downloaded once and streamed to multiple uploads concurrently,
@@ -358,7 +438,7 @@ class AsyncSlackToJiraTransfer:
 
     async def transfer(
         self, file_urls: List[dict[str, str]], jira_issue_ids: List[str]
-    ) -> List[List[str]]:
+    ) -> List[List[dict | str]]:
         '''
         Transfer multiple files from Slack to multiple Jira issues concurrently.
 
@@ -373,14 +453,14 @@ class AsyncSlackToJiraTransfer:
             jira_issue_ids: List of Jira issue IDs to upload files to.
 
         Returns:
-            List[List[str]]: Outer list = files, inner list = Jira markup per issue.
-            Returns empty strings for failed uploads.
+            List[List[dict | str]]: Outer list = files, inner list = attachment details
+            per issue. Empty strings represent failed uploads.
 
         Example:
             For 2 files and 3 Jira issues:
             [
-                ['!file1.png|thumbnail!', '!file1.png|thumbnail!', '!file1.png|thumbnail!'],
-                ['[^file2.pdf]', '[^file2.pdf]', '[^file2.pdf]']
+                [{'filename': 'file1.png'}, {'filename': 'file1.png'}],
+                [{'filename': 'file2.pdf'}, {'filename': 'file2.pdf'}]
             ]
 
         Note:
@@ -492,40 +572,90 @@ class ReactionSyncEvent(ReactionEvent):
 
         jira_issue_ids: list[str] = [cast(str, item.get('jira_issue_id')) for item in items]
 
-        attachment_contents = []
+        attachment_contents: list[list[dict]] = []
         if files:
             attachment_contents = self.process_file_attachments(
                 files, jira_issue_ids, self.channel_id, self.message_ts  # type: ignore
             )
 
-        formatted_text = self._format_text(text, message_link)  # type: ignore
-
         for idx, jira_issue_id in enumerate(jira_issue_ids):
+            attachments = attachment_contents[idx] if attachment_contents else []
             self.jira_wrapper.add_comment(
                 jira_issue_id,
-                f'{formatted_text}\n\n{attachment_contents[idx] if attachment_contents else ''}',
+                self._comment_document(text, message_link, attachments),  # type: ignore
             )
 
     @staticmethod
-    def _format_text(text: str, message_link: str) -> str:
+    def _text_content(text: str) -> list[dict]:
         '''
-        Format text with a Slack message link reference for Jira.
+        Convert plain text into ADF inline nodes without interpreting markup.
 
-        Prepends attribution link to the original Slack message using Jira's
-        markdown-style link syntax. This provides traceability from Jira
-        comments back to their source Slack messages.
+        Args:
+            text: Message text from Slack.
+
+        Returns:
+            Text and hard-break nodes.
+        '''
+        content: list[dict] = []
+        for index, line in enumerate(text.split('\n')):
+            if index:
+                content.append({'type': 'hardBreak'})
+            if line:
+                content.append({'type': 'text', 'text': line})
+        return content
+
+    @staticmethod
+    def _comment_document(text: Optional[str], message_link: str, attachments: list) -> dict:
+        '''
+        Build a Jira Cloud comment document.
+
+        The Slack message is plain text. The attribution and uploaded files are
+        links, and images are embedded from their attachment URL.
+
+        Args:
+            text: The original message text from Slack. None is treated as empty.
+            message_link: The Slack permalink to the message.
+            attachments: Uploaded attachment details for this Jira issue. Non-dict
+                entries are ignored.
+
+        Returns:
+            Atlassian Document Format document.
+        '''
+        content = [
+            {
+                'type': 'paragraph',
+                'content': [
+                    {'type': 'text', 'text': '(Originating from '},
+                    {
+                        'type': 'text',
+                        'text': 'Slack message',
+                        'marks': [{'type': 'link', 'attrs': {'href': message_link}}],
+                    },
+                    {'type': 'text', 'text': ')'},
+                ],
+            }
+        ]
+        message_content = ReactionSyncEvent._text_content(text or '')
+        if message_content:
+            content.append({'type': 'paragraph', 'content': message_content})
+        for attachment in attachments:
+            if isinstance(attachment, dict):
+                content.extend(AsyncSlackToJiraTransfer.attachment_nodes(attachment))
+        return {'type': 'doc', 'version': 1, 'content': content}
+
+    @staticmethod
+    def _format_text(text: Optional[str], message_link: str) -> dict:
+        '''
+        Format a Slack message as a Jira Cloud comment document.
 
         Args:
             text: The original message text from Slack.
             message_link: The Slack permalink to the message.
 
         Returns:
-            The formatted text with attribution in Jira markdown format.
-
-        Example:
-            "(Originating from [Slack message|https://...slack.com/...])\n\nActual message text"
+            Atlassian Document Format document without attachments.
         '''
-        return f'(Originating from [Slack message|{message_link}])\n\n{text}'
+        return ReactionSyncEvent._comment_document(text, message_link, [])
 
     def process_file_attachments(
         self,
@@ -533,7 +663,7 @@ class ReactionSyncEvent(ReactionEvent):
         jira_issue_ids: list[str],
         channel_id: str,
         message_ts: str,
-    ) -> list[str]:
+    ) -> list[list[dict]]:
         '''
         Process Slack file attachments and upload to multiple Jira issues with streaming.
 
@@ -543,8 +673,8 @@ class ReactionSyncEvent(ReactionEvent):
         issues simultaneously using a producer-consumer pattern with asyncio queues.
 
         Each file receives a unique name to prevent collisions and enable traceability.
-        Image files are rendered as inline thumbnails in Jira comments, while other
-        files are shown as attachment links.
+        Files are attached to the issue. Images are also embedded in the comment,
+        and every file is linked by its filename.
 
         Args:
             file_urls: List of file dictionaries with 'url' and 'name' keys from Slack.
@@ -553,15 +683,14 @@ class ReactionSyncEvent(ReactionEvent):
             message_ts: Slack message timestamp used in unique filename generation.
 
         Returns:
-            List[str]: One string per Jira issue containing newline-separated Jira
-            markup for all successfully uploaded files. Failed uploads are omitted.
+            List of attachment details for each Jira issue. Failed uploads are omitted.
 
         Example:
             For 2 files uploaded to 3 Jira issues:
             [
-                '!photo.png|thumbnail!\n\n[^document.pdf]',  # Issue 1
-                '!photo.png|thumbnail!\n\n[^document.pdf]',  # Issue 2
-                '!photo.png|thumbnail!\n\n[^document.pdf]',  # Issue 3
+                [{'filename': 'photo.png'}, {'filename': 'document.pdf'}],
+                [{'filename': 'photo.png'}, {'filename': 'document.pdf'}],
+                [{'filename': 'photo.png'}, {'filename': 'document.pdf'}],
             ]
 
         Filename Format:
@@ -577,16 +706,18 @@ class ReactionSyncEvent(ReactionEvent):
 
         async_slack_to_jira_transfer = AsyncSlackToJiraTransfer(
             self.slack_sdk_wrapper.client.token,  # type: ignore
+            self.jira_wrapper.jira_email,  # type: ignore
             self.jira_wrapper.jira_token,  # type: ignore
             self.jira_wrapper.server_url,  # type: ignore
             channel_id,
             message_ts,
         )
-        jira_markups: List[List[str]] = asyncio.run(
-            async_slack_to_jira_transfer.transfer(file_urls, jira_issue_ids)
-        )
+        jira_markups = asyncio.run(async_slack_to_jira_transfer.transfer(file_urls, jira_issue_ids))
 
-        return ['\n\n'.join(jira_markup) for jira_markup in zip(*jira_markups)]
+        return [
+            [item for item in issue_files if isinstance(item, dict)]
+            for issue_files in zip(*jira_markups)
+        ]
 
 
 # Register this concrete event type with the factory for reaction routing

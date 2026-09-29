@@ -127,7 +127,9 @@ Alarms are always created and evaluated. You are always free to modify the thres
 
 The following secrets must be provided through terraform variables:
 
-- **jira_token**: API token for authenticating with JIRA
+- **jira_email**: Atlassian account email that owns the Jira Cloud API token
+- **jira_token**: Jira Cloud API token. Use a classic token without scopes
+- **jira_server_url**: Jira Cloud site URL, for example `https://<namespace>.atlassian.net`
 - **slack_token**: Bot user OAuth token (starts with `xoxb-`)
 - **slack_signing_secret**: Signing secret for verifying Slack requests
 
@@ -150,10 +152,13 @@ Subscribe to bot events:
 
 The [Manifest Template](manifest_template.yml) can also help you quickly setup your bot with as per the guidelines provided above.
 
-## JIRA Configuration
+## Jira Cloud Configuration
 
-1. Generate an API token from your JIRA account settings
-2. Ensure the JIRA user has permissions to:
+The integration talks to Jira Cloud, not Jira Server or Data Center.
+
+1. Create a classic API token, without scopes, for the Atlassian account that will own the integration: https://id.atlassian.com/manage-profile/security/api-tokens
+2. Set `jira_email` to that account's email, `jira_token` to the token, and `jira_server_url` to the Cloud site, for example `https://<namespace>.atlassian.net`
+3. Ensure that account has permission to:
    - Create remote links
    - Add comments to issues
    - Attach files to issues
