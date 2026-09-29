@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,6 +117,7 @@ resource "aws_lambda_function" "process_lambda" {
     variables = {
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.dynamodb_table.name
       JIRA_TOKEN_ID       = aws_secretsmanager_secret.jira_token.id
+      JIRA_EMAIL          = var.jira_email
       JIRA_SERVER_URL     = var.jira_server_url
       SLACK_TOKEN_ID      = aws_secretsmanager_secret.slack_token.id
     }

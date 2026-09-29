@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,6 +62,7 @@ from slack_event_process.slack_event_processor import SlackEventProcessor
 
 DYNAMODB_TABLE_NAME = 'test-slack-jira-table'
 JIRA_SERVER_URL = 'https://test-jira.atlassian.net'
+JIRA_EMAIL = 'bot@example.com'
 JIRA_TOKEN = 'test_jira_token'
 ICON_URL = 'https://example.com/icon.png'
 ICON_TITLE = 'Test Icon'
@@ -566,8 +567,22 @@ JIRA_WRAPPER_VALIDATION_SCENARIOS = [
         name='add_comment',
         args=('PROJ-123', 'Test Comment'),
         jira_wrapper_call='add_comment',
-        expected_jira_call='issue_add_comment',
-        expected_args=('PROJ-123', 'Test Comment'),
+        expected_jira_call='post',
+        expected_args=('rest/api/3/issue/PROJ-123/comment',),
+        expected_kwargs={
+            'data': {
+                'body': {
+                    'type': 'doc',
+                    'version': 1,
+                    'content': [
+                        {
+                            'type': 'paragraph',
+                            'content': [{'type': 'text', 'text': 'Test Comment'}],
+                        }
+                    ],
+                }
+            }
+        },
     ),
     JiraWrapperValidationScenario(
         name='validate_link',
@@ -590,8 +605,75 @@ def test_jira_wrapper_validation(processor, test_case: JiraWrapperValidationScen
     with patch.object(
         processor.event_factory.jira_wrapper.jira, expected_jira_call
     ) as mock_jira_call:
+        if jira_wrapper_call == 'add_link':
+            mock_jira_call.return_value = {'id': '1'}
         getattr(processor.event_factory.jira_wrapper, jira_wrapper_call)(*args)
         mock_jira_call.assert_called_once_with(*expected_args, **expected_kwargs)
+
+
+ADD_LINK_URL = 'https://test.slack.com/messages/test-channel/1234567890.123456'
+
+
+def _jira_response(status_code: int, content: bytes) -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    response._content = content  # pylint: disable=protected-access
+    response.encoding = 'utf-8'
+    return response
+
+
+def test_add_link_uses_id_from_json_body(processor):
+    jira = processor.event_factory.jira_wrapper.jira
+    with patch.object(
+        jira, 'create_or_update_issue_remote_links', return_value={'id': 100}
+    ) as mock_create:
+        link_id = processor.event_factory.jira_wrapper.add_link(
+            'PROJ-123', ADD_LINK_URL, 'Title', 'icon', 'Icon'
+        )
+
+    assert link_id == 100
+    assert mock_create.call_args.args[:3] == ('PROJ-123', ADD_LINK_URL, 'Title')
+
+
+def test_add_link_uses_id_from_raw_response(processor):
+    jira = processor.event_factory.jira_wrapper.jira
+    response = _jira_response(201, b'{"id": 100}')
+    with patch.object(jira, 'create_or_update_issue_remote_links', return_value=response):
+        link_id = processor.event_factory.jira_wrapper.add_link(
+            'PROJ-123', ADD_LINK_URL, 'Title', 'icon', 'Icon'
+        )
+
+    assert link_id == 100
+
+
+@pytest.mark.parametrize(
+    'content',
+    [b'', b'null', b' '],
+    ids=['empty', 'json-null', 'blank'],
+)
+def test_add_link_raises_with_http_status_when_body_has_no_id(processor, content):
+    jira = processor.event_factory.jira_wrapper.jira
+    response = _jira_response(201, content)
+    with (
+        patch.object(jira, 'create_or_update_issue_remote_links', return_value=response),
+        pytest.raises(RuntimeError, match='HTTP 201'),
+    ):
+        processor.event_factory.jira_wrapper.add_link(
+            'PROJ-123', ADD_LINK_URL, 'Title', 'icon', 'Icon'
+        )
+
+
+def test_add_link_raises_http_error_from_raw_response(processor):
+    jira = processor.event_factory.jira_wrapper.jira
+    response = _jira_response(400, b'{"errorMessages": ["invalid"]}')
+    with (
+        patch.object(jira, 'create_or_update_issue_remote_links', return_value=response),
+        patch.object(jira, 'raise_for_status', side_effect=requests.exceptions.HTTPError('400')),
+        pytest.raises(requests.exceptions.HTTPError),
+    ):
+        processor.event_factory.jira_wrapper.add_link(
+            'PROJ-123', ADD_LINK_URL, 'Title', 'icon', 'Icon'
+        )
 
 
 @dataclass
@@ -765,10 +847,146 @@ UTILITY_METHOD_SCENARIOS = [
         method='_format_text',
         class_=event.ReactionSyncEvent,
         args=('Test comment', 'https://test.slack.com/archives/C1234567890/p1234567890123456'),
-        expected_result=(
-            '(Originating from [Slack message|https://test.slack.com/archives/C1234567890/'
-            'p1234567890123456])\n\nTest comment'
+        expected_result={
+            'type': 'doc',
+            'version': 1,
+            'content': [
+                {
+                    'type': 'paragraph',
+                    'content': [
+                        {'type': 'text', 'text': '(Originating from '},
+                        {
+                            'type': 'text',
+                            'text': 'Slack message',
+                            'marks': [
+                                {
+                                    'type': 'link',
+                                    'attrs': {
+                                        'href': (
+                                            'https://test.slack.com/archives/C1234567890/'
+                                            'p1234567890123456'
+                                        )
+                                    },
+                                }
+                            ],
+                        },
+                        {'type': 'text', 'text': ')'},
+                    ],
+                },
+                {
+                    'type': 'paragraph',
+                    'content': [{'type': 'text', 'text': 'Test comment'}],
+                },
+            ],
+        },
+    ),
+    UtilityMethodScenario(
+        name='format_text_wiki_markup_literal',
+        method='_format_text',
+        class_=event.ReactionSyncEvent,
+        args=('{panel}phish{panel}', 'https://test.slack.com/archives/C1234567890/p1'),
+        expected_result={
+            'type': 'doc',
+            'version': 1,
+            'content': [
+                {
+                    'type': 'paragraph',
+                    'content': [
+                        {'type': 'text', 'text': '(Originating from '},
+                        {
+                            'type': 'text',
+                            'text': 'Slack message',
+                            'marks': [
+                                {
+                                    'type': 'link',
+                                    'attrs': {
+                                        'href': 'https://test.slack.com/archives/C1234567890/p1'
+                                    },
+                                }
+                            ],
+                        },
+                        {'type': 'text', 'text': ')'},
+                    ],
+                },
+                {
+                    'type': 'paragraph',
+                    'content': [{'type': 'text', 'text': '{panel}phish{panel}'}],
+                },
+            ],
+        },
+    ),
+    UtilityMethodScenario(
+        name='format_text_noformat_passthrough',
+        method='_format_text',
+        class_=event.ReactionSyncEvent,
+        args=(
+            '{noformat}\n{panel}phish{/panel}',
+            'https://test.slack.com/archives/C1234567890/p1',
         ),
+        expected_result={
+            'type': 'doc',
+            'version': 1,
+            'content': [
+                {
+                    'type': 'paragraph',
+                    'content': [
+                        {'type': 'text', 'text': '(Originating from '},
+                        {
+                            'type': 'text',
+                            'text': 'Slack message',
+                            'marks': [
+                                {
+                                    'type': 'link',
+                                    'attrs': {
+                                        'href': 'https://test.slack.com/archives/C1234567890/p1'
+                                    },
+                                }
+                            ],
+                        },
+                        {'type': 'text', 'text': ')'},
+                    ],
+                },
+                {
+                    'type': 'paragraph',
+                    'content': [
+                        {'type': 'text', 'text': '{noformat}'},
+                        {'type': 'hardBreak'},
+                        {'type': 'text', 'text': '{panel}phish{/panel}'},
+                    ],
+                },
+            ],
+        },
+    ),
+    UtilityMethodScenario(
+        name='format_text_none',
+        method='_format_text',
+        class_=event.ReactionSyncEvent,
+        args=(None, 'https://test.slack.com/archives/C1234567890/p1'),
+        expected_result={
+            'type': 'doc',
+            'version': 1,
+            'content': [
+                {
+                    'type': 'paragraph',
+                    'content': [
+                        {'type': 'text', 'text': '(Originating from '},
+                        {
+                            'type': 'text',
+                            'text': 'Slack message',
+                            'marks': [
+                                {
+                                    'type': 'link',
+                                    'attrs': {
+                                        'href': 'https://test.slack.com/archives/C1234567890/p1'
+                                    },
+                                }
+                            ],
+                        },
+                        {'type': 'text', 'text': ')'},
+                    ],
+                },
+            ],
+        },
     ),
     UtilityMethodScenario(
         name='validate_jira_issue_id',
@@ -1184,7 +1402,11 @@ def test_register_event_jira_link(processor, test_case: RegisterEventJiraLinkSce
         )
 
         mock_jira_call = stack.enter_context(
-            patch.object(processor.event_factory.jira_wrapper.jira, expected_jira_call)
+            patch.object(
+                processor.event_factory.jira_wrapper.jira,
+                expected_jira_call,
+                return_value={'id': '1'},
+            )
         )
 
         processor.process(event_dict)
@@ -1268,6 +1490,7 @@ async def test_async_slack_to_jira_transfer(test_case: AsyncTransferScenario):
 
     transfer = AsyncSlackToJiraTransfer(
         slack_token=slack_token,
+        jira_email=JIRA_EMAIL,
         jira_token=jira_token,
         jira_server_url=jira_server_url,
         channel_id=channel_id,
@@ -1350,79 +1573,107 @@ async def test_async_slack_to_jira_transfer(test_case: AsyncTransferScenario):
                     assert markup == ''
                 else:
                     filename = file['name']
-                    if filename.endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                        assert '|thumbnail!' in markup
-                    else:
-                        assert '[^' in markup and ']' in markup
-                    assert filename.split('.')[0] in markup
+                    assert isinstance(markup, dict)
+                    assert filename.split('.')[0] in markup['filename']
+                    assert markup['id'] == '12345'
+                    assert markup['is_image'] == filename.endswith(
+                        ('.png', '.jpg', '.jpeg', '.gif')
+                    )
 
 
 @dataclass
 class MarkupGenerationScenario(Scenario):
     filename: str
-    expected_markup_contains: List[str]
-    expected_markup_type: str  # 'thumbnail' or 'attachment'
+    is_image: bool
 
 
 MARKUP_GENERATION_SCENARIOS = [
-    MarkupGenerationScenario(
-        name='png_image',
-        filename='photo.png',
-        expected_markup_contains=['photo.png', '|thumbnail!', '!'],
-        expected_markup_type='thumbnail',
-    ),
-    MarkupGenerationScenario(
-        name='jpg_image',
-        filename='image.jpg',
-        expected_markup_contains=['image.jpg', '|thumbnail!', '!'],
-        expected_markup_type='thumbnail',
-    ),
-    MarkupGenerationScenario(
-        name='jpeg_image',
-        filename='picture.jpeg',
-        expected_markup_contains=['picture.jpeg', '|thumbnail!', '!'],
-        expected_markup_type='thumbnail',
-    ),
-    MarkupGenerationScenario(
-        name='gif_image',
-        filename='animation.gif',
-        expected_markup_contains=['animation.gif', '|thumbnail!', '!'],
-        expected_markup_type='thumbnail',
-    ),
-    MarkupGenerationScenario(
-        name='pdf_document',
-        filename='report.pdf',
-        expected_markup_contains=['report.pdf', '[^', ']'],
-        expected_markup_type='attachment',
-    ),
-    MarkupGenerationScenario(
-        name='text_file',
-        filename='data.txt',
-        expected_markup_contains=['data.txt', '[^', ']'],
-        expected_markup_type='attachment',
-    ),
-    MarkupGenerationScenario(
-        name='csv_file',
-        filename='spreadsheet.csv',
-        expected_markup_contains=['spreadsheet.csv', '[^', ']'],
-        expected_markup_type='attachment',
-    ),
+    MarkupGenerationScenario(name='png_image', filename='photo.png', is_image=True),
+    MarkupGenerationScenario(name='jpg_image', filename='image.jpg', is_image=True),
+    MarkupGenerationScenario(name='jpeg_image', filename='picture.jpeg', is_image=True),
+    MarkupGenerationScenario(name='gif_image', filename='animation.gif', is_image=True),
+    MarkupGenerationScenario(name='pdf_document', filename='report.pdf', is_image=False),
+    MarkupGenerationScenario(name='text_file', filename='data.txt', is_image=False),
+    MarkupGenerationScenario(name='csv_file', filename='spreadsheet.csv', is_image=False),
 ]
 
 
 @pytest.mark.parametrize('test_case', MARKUP_GENERATION_SCENARIOS, ids=str)
 def test_filename_to_jira_markup(test_case: MarkupGenerationScenario):
-    markup = AsyncSlackToJiraTransfer.filename_to_jira_markup(test_case.filename)
+    attachment = {
+        'filename': test_case.filename,
+        'id': '10001',
+        'content': 'https://test-jira.atlassian.net/rest/api/3/attachment/content/10001',
+        'is_image': test_case.is_image,
+    }
+    nodes = AsyncSlackToJiraTransfer.attachment_nodes(attachment)
+    link = nodes[-1]['content'][0]
 
-    for expected in test_case.expected_markup_contains:
-        assert expected in markup, f"Expected '{expected}' in markup '{markup}'"
-
-    if test_case.expected_markup_type == 'thumbnail':
-        assert markup.startswith('!')
-        assert '|thumbnail!' in markup
+    assert link['text'] == test_case.filename
+    assert link['marks'][0]['attrs']['href'] == attachment['content']
+    if test_case.is_image:
+        assert nodes[0]['type'] == 'mediaSingle'
+        assert nodes[0]['content'][0]['attrs']['type'] == 'external'
+        assert nodes[0]['content'][0]['attrs']['url'] == attachment['content']
     else:
-        assert markup.startswith('[^')
-        assert markup.endswith(']')
+        assert nodes[0]['type'] == 'paragraph'
+
+
+@dataclass
+class FilenameSanitizationScenario(Scenario):
+    filename: str
+    expected_filename: str
+
+
+FILENAME_SANITIZATION_SCENARIOS = [
+    FilenameSanitizationScenario(
+        name='plain_filename_unchanged',
+        filename='photo.png',
+        expected_filename='photo.png',
+    ),
+    FilenameSanitizationScenario(
+        name='markup_characters_kept',
+        filename='photo.png|thumbnail!{panel}phish{panel}.png',
+        expected_filename='photo.png|thumbnail!{panel}phish{panel}.png',
+    ),
+    FilenameSanitizationScenario(
+        name='attachment_characters_kept',
+        filename='report.pdf]-[^other.pdf',
+        expected_filename='report.pdf]-[^other.pdf',
+    ),
+    FilenameSanitizationScenario(
+        name='path_components_dropped',
+        filename='../../etc/passwd',
+        expected_filename='passwd',
+    ),
+]
+
+
+@pytest.mark.parametrize('test_case', FILENAME_SANITIZATION_SCENARIOS, ids=str)
+def test_sanitize_filename(test_case: FilenameSanitizationScenario):
+    assert (
+        AsyncSlackToJiraTransfer.sanitize_filename(test_case.filename)
+        == test_case.expected_filename
+    )
+
+
+@pytest.mark.parametrize(
+    'filename, is_image',
+    [('photo.PNG', True), ('photo.Jpg', True), ('report.PDF', False)],
+)
+def test_uploaded_attachment_image_detection_ignores_case(filename, is_image):
+    transfer = AsyncSlackToJiraTransfer(
+        slack_token='test_slack_token',
+        jira_email=JIRA_EMAIL,
+        jira_token=JIRA_TOKEN,
+        jira_server_url=JIRA_SERVER_URL,
+        channel_id='C1234567890',
+        message_ts='1234567890123456',
+    )
+
+    attachment = transfer._uploaded_attachment(filename, {'id': 10001})
+
+    assert attachment['is_image'] is is_image
 
 
 @dataclass
@@ -1515,7 +1766,7 @@ def test_jira_wrapper_retries_on_rate_limit_error():
 
     mock_request.attempt_count = 0
 
-    wrapper = JiraWrapper(server_url=JIRA_SERVER_URL, jira_token=JIRA_TOKEN)
+    wrapper = JiraWrapper(server_url=JIRA_SERVER_URL, jira_email=JIRA_EMAIL, jira_token=JIRA_TOKEN)
     wrapper.jira._session.request = mock_request
 
     result = wrapper.add_comment('PROJ-123', 'Test comment')

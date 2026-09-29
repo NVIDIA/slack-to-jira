@@ -46,6 +46,7 @@ dynamo_db_wrapper = DynamoDbWrapper(dynamo_db_table_name)
 secrets_manager_wrapper = SecretsManagerWrapper()
 
 JIRA_TOKEN_ID = os.environ['JIRA_TOKEN_ID']
+JIRA_EMAIL = os.environ['JIRA_EMAIL']
 JIRA_SERVER_URL = os.getenv('JIRA_SERVER_URL')
 
 SLACK_TOKEN_ID = os.environ['SLACK_TOKEN_ID']
@@ -65,7 +66,7 @@ def process(event_: dict, _: Any) -> None:
     slack_token = secrets_manager_wrapper.get_secret(SLACK_TOKEN_ID)
 
     slack_sdk_wrapper = SlackSdkWrapper(slack_token)
-    jira_wrapper = JiraWrapper(JIRA_SERVER_URL, jira_token)
+    jira_wrapper = JiraWrapper(JIRA_SERVER_URL, JIRA_EMAIL, jira_token)
 
     event_factory = event.EventFactory(
         slack_sdk_wrapper,
