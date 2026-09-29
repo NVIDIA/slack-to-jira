@@ -28,9 +28,12 @@ from typing import Any, Optional
 
 from .event import Event
 from .event_factory import EventFactory
-from .exceptions import NotHandledException
+from .exceptions import NotHandledException, IgnorableException
 
 logger = logging.getLogger()
+
+_JIRA_ISSUE_ID = re.compile(r'^[A-Z][A-Z0-9_]*-\d+$')
+_JIRA_ISSUE_ID_MAX_LEN = 64
 
 
 class AppMentionEvent(Event):
@@ -91,6 +94,13 @@ class AppMentionEvent(Event):
             text = re.sub(pattern, replace, text)
 
         return text.strip()
+
+    @staticmethod
+    def validate_jira_issue_id(raw: str) -> str:
+        issue_id = raw.strip().upper()
+        if len(issue_id) > _JIRA_ISSUE_ID_MAX_LEN or not _JIRA_ISSUE_ID.fullmatch(issue_id):
+            raise IgnorableException(f'Invalid Jira issue ID: {raw}')
+        return issue_id
 
     @classmethod
     def infer_subtype(cls, event_data: dict) -> tuple[str, Any]:

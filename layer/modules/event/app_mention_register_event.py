@@ -131,6 +131,7 @@ class AppMentionRegisterEvent(AppMentionEvent):
             )
 
         jira_issue_id, optional_param = (command_parts + [None])[:2]
+        jira_issue_id = self.validate_jira_issue_id(cast(str, jira_issue_id))
         link_text = optional_param or self.thread_ts
         channel_name = self.slack_sdk_wrapper.get_channel_name(self.channel_id)  # type: ignore # pylint: disable=line-too-long
         thread_link = self.slack_sdk_wrapper.get_message_link(self.channel_id, self.thread_ts)  # type: ignore # pylint: disable=line-too-long

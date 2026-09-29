@@ -117,7 +117,7 @@ class AppMentionDeregisterEvent(AppMentionEvent):
                 f'Invalid command format in app mention event: {self.sanitized_text}'
             )
 
-        jira_issue_id = command_parts[0]
+        jira_issue_id = self.validate_jira_issue_id(command_parts[0])
 
         thread_id = self._get_thread_id(self.thread_ts, self.channel_id)  # type: ignore
         dynamodb_key = {

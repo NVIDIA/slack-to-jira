@@ -43,6 +43,7 @@ from .reaction_event import ReactionEvent
 from .event_factory import EventFactory
 from .exceptions import IgnorableException
 from .config import CONFIG
+from .app_mention_event import AppMentionEvent
 
 logger = logging.getLogger()
 
@@ -201,7 +202,8 @@ class AsyncSlackToJiraTransfer:
         new_filename = (
             f'{filename_path.name}-{file_id}-{self.filename_suffix}{filename_path.suffix}'
         )
-        endpoint_url = self.jira_api_url_template.format(issue_id=jira_issue_id)
+        issue_id = AppMentionEvent.validate_jira_issue_id(jira_issue_id)
+        endpoint_url = self.jira_api_url_template.format(issue_id=issue_id)
 
         form = aiohttp.FormData()
         form.add_field('file', self.chunk_reader(queue), filename=new_filename)
