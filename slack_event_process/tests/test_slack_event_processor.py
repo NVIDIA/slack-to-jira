@@ -53,7 +53,7 @@ os.environ['APP_NAME'] = 'app-name'
 # pylint:disable=wrong-import-position
 import event  # pylint:disable=unused-import
 from event.event_factory import EventFactory
-from event.exceptions import NotHandledException
+from event.exceptions import NotHandledException, IgnorableException
 from event.config import CONFIG
 from event.reaction_sync_event import AsyncSlackToJiraTransfer
 
@@ -770,6 +770,27 @@ UTILITY_METHOD_SCENARIOS = [
             'p1234567890123456])\n\nTest comment'
         ),
     ),
+    UtilityMethodScenario(
+        name='validate_jira_issue_id',
+        method='validate_jira_issue_id',
+        class_=event.AppMentionEvent,
+        args=('PROJ-123',),
+        expected_result='PROJ-123',
+    ),
+    UtilityMethodScenario(
+        name='validate_jira_issue_id_uppercases',
+        method='validate_jira_issue_id',
+        class_=event.AppMentionEvent,
+        args=('proj-123',),
+        expected_result='PROJ-123',
+    ),
+    UtilityMethodScenario(
+        name='validate_jira_issue_id_with_digits_in_key',
+        method='validate_jira_issue_id',
+        class_=event.AppMentionEvent,
+        args=('ABC2-1',),
+        expected_result='ABC2-1',
+    ),
 ]
 
 
@@ -781,6 +802,25 @@ def test_utility_methods(test_case: UtilityMethodScenario):
 
     result = getattr(test_case.class_, method)(*args)
     assert result == expected_result
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '../admin/',
+        '..%2Fadmin',
+        'PROJ-123/../myself',
+        'PROJ',
+        'PROJ-',
+        '123-PROJ',
+        'PROJ-12a',
+        '',
+        'A' * 65,
+    ],
+)
+def test_validate_jira_issue_id_rejects_invalid(raw: str):
+    with pytest.raises(IgnorableException):
+        event.AppMentionEvent.validate_jira_issue_id(raw)
 
 
 class AttachmentInfo:  # pylint: disable=too-few-public-methods
